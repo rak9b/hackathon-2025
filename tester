@@ -1,0 +1,182 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  initializeApp, 
+  FirebaseApp 
+} from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  getDocs 
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword 
+} from 'firebase/auth';
+
+// Firebase Configuration
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID
+};
+
+// Initialize Firebase
+const app: FirebaseApp = initializeApp(firebaseConfig);
+const firestore = getFirestore(app);
+const auth = getAuth(app);
+
+// Interfaces
+interface CrimeReport {
+  id?: string;
+  userId: string;
+  location: string;
+  crimeType: string;
+  description: string;
+  timestamp: Date;
+  latitude?: number;
+  longitude?: number;
+}
+
+interface User {
+  id: string;
+  email: string;
+  displayName?: string;
+}
+
+// Security Validation Utility
+class SecurityValidator {
+  // Strong Password Validation
+  static validatePassword(password: string) {
+    return {
+      isValid: password.length >= 12 && 
+               /[A-Z]/.test(password) &&
+               /[a-z]/.test(password) &&
+               /[0-9]/.test(password) &&
+               /[!@#$%^&*()]/.test(password),
+      complexity: {
+        length: password.length >= 12,
+        uppercase: /[A-Z]/.test(password),
+        lowercase: /[a-z]/.test(password),
+        number: /[0-9]/.test(password),
+        specialChar: /[!@#$%^&*()]/.test(password)
+      }
+    };
+  }
+
+  // Geolocation Validation
+  static validateGeolocation(lat: number, lon: number) {
+    return lat >= -90 && lat <= 90 && 
+           lon >= -180 && lon <= 180;
+  }
+
+  // Crime Report Validation
+  static validateCrimeReport(report: CrimeReport) {
+    const requiredFields = [
+      'location', 
+      'crimeType', 
+      'description', 
+      'userId'
+    ];
+
+    const missingFields = requiredFields.filter(
+      field => !report[field] || report[field].trim() === ''
+    );
+
+    return {
+      isValid: missingFields.length === 0,
+      errors: missingFields
+    };
+  }
+}
+
+// Crime Reporting Component
+const CrimeReportForm: React.FC = () => {
+  const [report, setReport] = useState<CrimeReport>({
+    userId: '',
+    location: '',
+    crimeType: '',
+    description: '',
+    timestamp: new Date()
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      const validationResult = SecurityValidator.validateCrimeReport(report);
+      
+      if (!validationResult.isValid) {
+        throw new Error(`Invalid report: ${validationResult.errors.join(', ')}`);
+      }
+
+      await addDoc(collection(firestore, 'crime-reports'), report);
+      alert('Report submitted successfully');
+    } catch (error) {
+      console.error('Submission error:', error);
+      alert('Failed to submit report');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* Form fields implementation */}
+    </form>
+  );
+};
+
+// Authentication Service
+class AuthService {
+  // User Registration
+  static async register(email: string, password: string): Promise<User | null> {
+    try {
+      const passwordValidation = SecurityValidator.validatePassword(password);
+      
+      if (!passwordValidation.isValid) {
+        throw new Error('Weak password');
+      }
+
+      const userCredential = await createUserWithEmailAndPassword(
+        auth, 
+        email, 
+        password
+      );
+
+      return {
+        id: userCredential.user.uid,
+        email: userCredential.user.email || ''
+      };
+    } catch (error) {
+      console.error('Registration error:', error);
+      return null;
+    }
+  }
+
+  // User Login
+  static async login(email: string, password: string): Promise<User | null> {
+    try {
+      const userCredential = await signInWithEmailAndPassword(
+        auth, 
+        email, 
+        password
+      );
+
+      return {
+        id: userCredential.user.uid,
+        email: userCredential.user.email || ''
+      };
+    } catch (error) {
+      console.error('Login error:', error);
+      return null;
+    }
+  }
+}
+
+export { 
+  CrimeReportForm, 
+  AuthService, 
+  SecurityValidator 
+};
