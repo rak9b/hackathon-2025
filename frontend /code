@@ -1,0 +1,149 @@
+import React, { useState } from 'react';
+import { Camera, Map, Shield, Bell, Search } from 'lucide-react';
+
+const CrimeReportingApp = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [activeView, setActiveView] = useState('home');
+  const [reports, setReports] = useState([]);
+
+  const handleSubmitReport = (report) => {
+    setReports([...reports, { ...report, id: Date.now(), status: 'pending' }]);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-3">
+              <Shield className="w-8 h-8 text-blue-600" />
+              <span className="text-xl font-bold">SafetyWatch</span>
+            </div>
+            
+            <div className="hidden md:flex items-center space-x-6">
+              <button onClick={() => setActiveView('report')} 
+                      className="text-gray-600 hover:text-blue-600">
+                Report Crime
+              </button>
+              <button onClick={() => setActiveView('map')} 
+                      className="text-gray-600 hover:text-blue-600">
+                View Map
+              </button>
+              {!isAuthenticated ? (
+                <button onClick={() => setIsAuthenticated(true)} 
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg">
+                  Sign In
+                </button>
+              ) : (
+                <button className="bg-red-600 text-white px-4 py-2 rounded-lg">
+                  Emergency
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        {activeView === 'report' && (
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h2 className="text-2xl font-bold mb-6">Report an Incident</h2>
+              
+              <form className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Incident Type</label>
+                  <select className="w-full p-3 border rounded-lg">
+                    <option>Select type...</option>
+                    <option>Theft</option>
+                    <option>Vandalism</option>
+                    <option>Suspicious Activity</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Location</label>
+                  <div className="h-48 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <Map className="w-8 h-8 text-gray-400" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Description</label>
+                  <textarea 
+                    className="w-full p-3 border rounded-lg" 
+                    rows={4}
+                    placeholder="Describe what happened..."
+                  />
+                </div>
+
+                <div className="border-2 border-dashed rounded-lg p-8 text-center">
+                  <Camera className="w-12 h-12 mx-auto text-gray-400 mb-3" />
+                  <p className="text-gray-600">Drop photos/videos here or click to upload</p>
+                </div>
+
+                <button 
+                  type="submit"
+                  className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium"
+                >
+                  Submit Report
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {activeView === 'map' && (
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <div className="mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-3 text-gray-400 w-5 h-5" />
+                <input 
+                  type="text"
+                  placeholder="Search location..."
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg"
+                />
+              </div>
+            </div>
+            
+            <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
+              <Map className="w-12 h-12 text-gray-400" />
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg text-sm">
+                All Reports
+              </button>
+              <button className="bg-green-100 text-green-700 px-4 py-2 rounded-lg text-sm">
+                Verified
+              </button>
+              <button className="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-lg text-sm">
+                Recent
+              </button>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Mobile Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t">
+        <div className="flex justify-around items-center p-4">
+          <button onClick={() => setActiveView('home')}>
+            <Shield className="w-6 h-6 text-gray-600" />
+          </button>
+          <button onClick={() => setActiveView('report')} 
+                  className="bg-blue-600 text-white p-4 rounded-full -mt-8">
+            <Camera className="w-6 h-6" />
+          </button>
+          <button onClick={() => setActiveView('map')}>
+            <Map className="w-6 h-6 text-gray-600" />
+          </button>
+        </div>
+      </nav>
+    </div>
+  );
+};
+
+export default CrimeReportingApp;
