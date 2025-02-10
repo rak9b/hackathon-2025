@@ -1,0 +1,93 @@
+import React, { useState } from 'react';
+import { Camera, Map, Shield, ThumbsUp, AlertCircle } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+const CrimeReportInterface = () => {
+  const [activeTab, setActiveTab] = useState('report');
+
+  return (
+    <div className="max-w-4xl mx-auto p-4">
+      <div className="mb-8 text-center">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Community Safety Hub</h1>
+        <p className="text-gray-600">Together we make our neighborhood safer</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <Card className="bg-blue-50">
+          <CardContent className="p-6 text-center">
+            <Shield className="w-8 h-8 mx-auto mb-4 text-blue-600" />
+            <h3 className="font-semibold mb-2">Report Incident</h3>
+            <p className="text-sm text-gray-600">Submit details with photos/videos</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-green-50">
+          <CardContent className="p-6 text-center">
+            <ThumbsUp className="w-8 h-8 mx-auto mb-4 text-green-600" />
+            <h3 className="font-semibold mb-2">Verify Reports</h3>
+            <p className="text-sm text-gray-600">Help validate community reports</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-purple-50">
+          <CardContent className="p-6 text-center">
+            <Map className="w-8 h-8 mx-auto mb-4 text-purple-600" />
+            <h3 className="font-semibold mb-2">View Crime Map</h3>
+            <p className="text-sm text-gray-600">Explore incident hotspots</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Submit New Report</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Incident Type</label>
+              <select className="w-full p-2 border rounded">
+                <option>Theft</option>
+                <option>Vandalism</option>
+                <option>Suspicious Activity</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Description</label>
+              <textarea 
+                className="w-full p-2 border rounded" 
+                rows={4}
+                placeholder="Provide details about the incident..."
+              />
+            </div>
+
+            <div className="border-2 border-dashed rounded-lg p-6 text-center">
+              <Camera className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm text-gray-600">
+                Drop photos/videos here or click to upload
+              </p>
+            </div>
+
+            <div className="flex justify-end">
+              <button className="bg-blue-600 text-white px-4 py-2 rounded">
+                Submit Report
+              </button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="bg-yellow-50 rounded-lg p-4 flex items-start">
+        <AlertCircle className="w-5 h-5 text-yellow-600 mr-2 mt-1" />
+        <p className="text-sm text-yellow-800">
+          All reports are verified by community members and local authorities. 
+          False reporting will result in account suspension.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+export default CrimeReportInterface;
