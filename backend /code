@@ -1,0 +1,421 @@
+// Firebase Configuration
+const firebaseConfig = {
+  // Add your Firebase config here
+// Notification and Security Monitoring Systems
+class NotificationService {
+  static async sendVerificationNotification(userId: string, decision: string) {
+    const user = await db.collection('users').doc(userId).get();
+    const userPrefs = await db.collection('userPreferences').doc(userId).get();
+    
+    const notification = {
+      userId,
+      type: 'verification_update',
+      status: decision,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      channels: determineNotificationChannels(userPrefs.data())
+    };
+
+    // Send through multiple channels (email, push, SMS)
+    await Promise.all([
+      sendEmailNotification(user.data().email, notification),
+      sendPushNotification(user.data().fcmToken, notification),
+      sendSMSNotification(user.data().phone, notification)
+    ]);
+  }
+
+  static async sendEmergencyAlert(reportId: string, severity: number) {
+    const report = await db.collection('reports').doc(reportId).get();
+    const location = report.data().location;
+    
+    // Get users within radius based on severity
+    const radius = calculateAlertRadius(severity);
+    const nearbyUsers = await getNearbyUsers(location, radius);
+    
+    // Send alerts in parallel
+    await Promise.allSettled(
+      nearbyUsers.map(user => sendHighPriorityNotification(user.id, report.data()))
+    );
+  }
+}
+
+class SecurityMonitor {
+  static async monitorUserActivity(userId: string) {
+    const activityRef = db.collection('userActivity').doc(userId);
+    const recentActivity = await activityRef
+      .collection('events')
+      .orderBy('timestamp', 'desc')
+      .limit(100)
+      .get();
+
+    const suspicious = detectSuspiciousPatterns(recentActivity.docs);
+    if (suspicious) {
+      await this.flagForReview(userId, suspicious);
+    }
+  }
+
+  static async detectAnomalies() {
+    const analytics = await getSystemAnalytics();
+    const anomalies = [];
+
+    // Check for unusual patterns
+    if (analytics.reportFrequency > THRESHOLD.REPORTS_PER_HOUR) {
+      anomalies.push({
+        type: 'high_report_volume',
+        value: analytics.reportFrequency
+      });
+    }
+
+    if (analytics.failedLogins > THRESHOLD.FAILED_LOGINS) {
+      anomalies.push({
+        type: 'login_attempts',
+        value: analytics.failedLogins
+      });
+    }
+
+    if (anomalies.length > 0) {
+      await this.alertSecurityTeam(anomalies);
+    }
+  }
+
+  static async flagForReview(userId: string, reason: string) {
+    await db.collection('securityFlags').add({
+      userId,
+      reason,
+      status: 'pending',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      priority: calculatePriority(reason)
+    });
+  }
+};
+
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const storage = firebase.storage();
+const functions = firebase.functions();
+
+// Verification Workflow States
+enum VerificationState {
+  PENDING = 'pending',
+  DOCUMENT_SUBMITTED = 'document_submitted',
+  AI_VERIFIED = 'ai_verified',
+  HUMAN_REVIEWED = 'human_reviewed',
+  VERIFIED = 'verified',
+  REJECTED = 'rejected'
+}
+
+// Data Models
+interface User {
+  uid: string;
+  email: string;
+  displayName: string;
+  verificationStatus: 'pending' | 'verified' | 'rejected';
+  trustScore: number;
+  createdAt: Timestamp;
+  lastUpdated: Timestamp;
+}
+
+interface CrimeReport {
+  id: string;
+  reporterId: string;
+  type: string;
+  description: string;
+  location: GeoPoint;
+  mediaUrls: string[];
+  status: 'pending' | 'verified' | 'resolved';
+  witnesses: string[];
+  aiAnalysis: {
+    severity: number;
+    category: string;
+    confidence: number;
+  };
+  createdAt: Timestamp;
+  lastUpdated: Timestamp;
+}
+
+// Authentication Functions
+export const signUp = async (email: string, password: string) => {
+  try {
+    const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
+    await createUserProfile(userCredential.user);
+    return userCredential.user;
+  } catch (error) {
+    throw new Error(`Signup failed: ${error.message}`);
+  }
+};
+
+// Cloud Functions
+exports.processNewReport = functions.firestore
+  .document('reports/{reportId}')
+  .onCreate(async (snap, context) => {
+    const report = snap.data();
+    
+    // AI Analysis
+    const aiAnalysis = await analyzeReport(report);
+    
+    // Update report with AI findings
+    await snap.ref.update({
+      aiAnalysis,
+      status: 'pending',
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Notify nearby verified users
+    await notifyNearbyUsers(report.location, report.id);
+  });
+
+// Security Rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.uid == userId;
+    }
+    
+    match /reports/{reportId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.reporterId == request.auth.uid;
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.reporterId ||
+        hasVerifiedStatus(request.auth.uid)
+      );
+    }
+  }
+}
+
+// Storage Rules
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /reports/{reportId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null 
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}
+
+// AI Integration Service
+class AIService {
+  static async analyzeReport(report: CrimeReport) {
+    const textClient = new TextAnalyticsClient(process.env.AZURE_ENDPOINT, new AzureKeyCredential(process.env.AZURE_KEY));
+    const visionClient = new ComputerVisionClient(process.env.AZURE_ENDPOINT, new AzureKeyCredential(process.env.AZURE_KEY));
+
+    // Analyze text content
+    const textAnalysis = await textClient.analyzeSentiment(report.description);
+    const keyPhrases = await textClient.extractKeyPhrases(report.description);
+    
+    // Analyze media content
+    const mediaAnalyses = await Promise.all(report.mediaUrls.map(async url => {
+      const analysis = await visionClient.analyzeImage(url, {
+        visualFeatures: ["Objects", "Faces", "Description"]
+      });
+      return analysis;
+    }));
+
+    // Merge analysis results
+    return {
+      severity: calculateSeveritScore(textAnalysis.sentiment, mediaAnalyses),
+      category: determineCategory(keyPhrases, mediaAnalyses),
+      confidence: calculateConfidenceScore(textAnalysis, mediaAnalyses),
+      keywords: keyPhrases.slice(0, 5),
+      identifiedObjects: extractRelevantObjects(mediaAnalyses),
+      potentialThreatLevel: assessThreatLevel(textAnalysis, mediaAnalyses)
+    };
+  }
+
+  static calculateSeverityScore(sentiment, mediaAnalyses) {
+    const sentimentScore = sentiment.score;
+    const objectSeverity = mediaAnalyses.reduce((acc, analysis) => {
+      const dangerousObjects = analysis.objects.filter(obj => 
+        DANGEROUS_OBJECTS.includes(obj.object));
+      return acc + (dangerousObjects.length * 0.2);
+    }, 0);
+    
+    return Math.min(1, sentimentScore + objectSeverity);
+  }
+
+  static assessThreatLevel(textAnalysis, mediaAnalyses) {
+    const threatIndicators = {
+      text: {
+        violentLanguage: detectViolentLanguage(textAnalysis),
+        urgencyLevel: assessUrgency(textAnalysis),
+        weaponMentions: detectWeaponReferences(textAnalysis),
+        locationSensitivity: assessLocationRisk(textAnalysis)
+      },
+      media: {
+        weapons: detectWeapons(mediaAnalyses),
+        suspiciousObjects: detectSuspiciousObjects(mediaAnalyses),
+        crowdSize: assessCrowdSize(mediaAnalyses),
+        timeOfDay: determineTimeContext(mediaAnalyses)
+      }
+    };
+
+    const weights = {
+      violentLanguage: 0.3,
+      urgencyLevel: 0.2,
+      weaponMentions: 0.15,
+      locationSensitivity: 0.1,
+      weapons: 0.4,
+      suspiciousObjects: 0.2,
+      crowdSize: 0.1,
+      timeOfDay: 0.05
+    };
+
+    return calculateWeightedThreatScore(threatIndicators, weights);
+  }
+
+  static detectViolentLanguage(textAnalysis) {
+    const violentTerms = new Set(['weapon', 'gun', 'knife', 'attack', 'threat']);
+    const keyPhrases = textAnalysis.keyPhrases.map(phrase => phrase.toLowerCase());
+    return keyPhrases.filter(phrase => violentTerms.has(phrase)).length / keyPhrases.length;
+  }
+
+  static assessUrgency(textAnalysis) {
+    const urgentPhrases = ['immediately', 'urgent', 'emergency', 'help', 'danger'];
+    return calculatePhraseFrequency(textAnalysis.text, urgentPhrases);
+  }
+}
+
+// Data Access Layer
+class VerificationService {
+  static async initiateVerification(userId: string, documents: VerificationDocument[]) {
+    const batch = db.batch();
+    
+    // Store documents in secure storage
+    const docUrls = await Promise.all(
+      documents.map(doc => uploadToSecureStorage(doc))
+    );
+    
+    // Create verification request
+    const verificationRef = db.collection('verificationRequests').doc();
+    batch.set(verificationRef, {
+      userId,
+      documents: docUrls,
+      state: VerificationState.DOCUMENT_SUBMITTED,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Update user status
+    const userRef = db.collection('users').doc(userId);
+    batch.update(userRef, {
+      verificationStatus: 'pending',
+      verificationRequestId: verificationRef.id
+    });
+    
+    await batch.commit();
+    
+    // Trigger AI verification
+    await functions.httpsCallable('processVerification')({
+      requestId: verificationRef.id
+    });
+  }
+
+  static async processAIVerification(requestId: string) {
+    const request = await db.collection('verificationRequests').doc(requestId).get();
+    const data = request.data();
+    
+    // Perform document verification
+    const verificationResults = await Promise.all(
+      data.documents.map(doc => verifyDocument(doc))
+    );
+    
+    // Update verification status based on AI results
+    const aiVerified = verificationResults.every(result => result.verified);
+    await request.ref.update({
+      state: aiVerified ? VerificationState.AI_VERIFIED : VerificationState.REJECTED,
+      aiResults: verificationResults,
+      lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    
+    if (aiVerified) {
+      await queueForHumanReview(requestId);
+    }
+  }
+
+  static async processHumanReview(requestId: string, reviewerId: string) {
+    const batch = db.batch();
+    const request = await db.collection('verificationRequests').doc(requestId).get();
+    const reviewData = request.data();
+
+    // Create review session with timeouts
+    const reviewRef = db.collection('reviews').doc();
+    batch.set(reviewRef, {
+      requestId,
+      reviewerId,
+      status: 'in_progress',
+      startTime: firebase.firestore.FieldValue.serverTimestamp(),
+      timeoutAt: firebase.firestore.FieldValue.serverTimestamp() + 3600
+    });
+
+    // Lock verification request
+    batch.update(request.ref, {
+      state: VerificationState.HUMAN_REVIEWED,
+      currentReviewId: reviewRef.id
+    });
+
+    await batch.commit();
+    return reviewRef.id;
+  }
+
+  static async submitReviewDecision(reviewId: string, decision: 'approve' | 'reject', notes: string) {
+    const review = await db.collection('reviews').doc(reviewId).get();
+    const reviewData = review.data();
+    const request = await db.collection('verificationRequests').doc(reviewData.requestId).get();
+    
+    const batch = db.batch();
+
+    // Update review
+    batch.update(review.ref, {
+      status: 'completed',
+      decision,
+      notes,
+      completedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Update verification request
+    batch.update(request.ref, {
+      state: decision === 'approve' ? VerificationState.VERIFIED : VerificationState.REJECTED,
+      reviewNotes: notes,
+      completedAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Update user status
+    const userRef = db.collection('users').doc(request.data().userId);
+    batch.update(userRef, {
+      verificationStatus: decision === 'approve' ? 'verified' : 'rejected',
+      lastVerificationUpdate: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    await batch.commit();
+
+    // Notify user of decision
+    await functions.httpsCallable('sendVerificationNotification')({
+      userId: request.data().userId,
+      decision
+    });
+  }
+}
+
+class ReportRepository {
+  static async createReport(reportData: Partial<CrimeReport>) {
+    const batch = db.batch();
+    
+    // Create report document
+    const reportRef = db.collection('reports').doc();
+    batch.set(reportRef, {
+      ...reportData,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      status: 'pending'
+    });
+    
+    // Update reporter's activity
+    const userRef = db.collection('users').doc(reportData.reporterId);
+    batch.update(userRef, {
+      reportCount: firebase.firestore.FieldValue.increment(1)
+    });
+    
+    await batch.commit();
+    return reportRef.id;
+  }
+}
